@@ -32,7 +32,12 @@ BANNER = r"""
 
 class Reporter:
     def __init__(self, no_color: bool = False):
-        self.console = Console(no_color=no_color, highlight=False) if _HAS_RICH else None
+        # markup=False: never interpret "[...]" in SSIDs/messages as rich markup
+        # (prevents crashes/format injection from odd network names).
+        self.console = (
+            Console(no_color=no_color, highlight=False, markup=False)
+            if _HAS_RICH else None
+        )
 
     # --- low-level output ---
     def log(self, msg: str, style: str = "") -> None:

@@ -3,11 +3,31 @@ from anywifi.model import Network
 from anywifi.target import selector
 
 
-def net(bssid, enc, signal=-50, wps=False, clients=0, auth=""):
+def net(bssid, enc, signal=-50, wps=False, clients=0, auth="", channel=6):
     return Network(
-        bssid=bssid, essid=enc, encryption=enc, signal=signal,
+        bssid=bssid, essid=enc, encryption=enc, signal=signal, channel=channel,
         wps=wps, clients=[f"c{i}" for i in range(clients)], auth=auth,
     )
+
+
+def test_unknown_signal_not_ranked_top():
+    # airodump power -1 means "unknown" — must not beat a strong known signal
+    unknown = net("00:00:00:00:00:01", "WPA2", signal=-1)
+    strong = net("00:00:00:00:00:02", "WPA2", signal=-40)
+    assert selector.attack_score(strong) > selector.attack_score(unknown)
+
+
+def test_rank_excludes_unknown_channel():
+    bad = net("00:00:00:00:00:01", "WPA2", channel=0)
+    good = net("00:00:00:00:00:02", "WPA2", channel=6)
+    ranked = selector.rank([bad, good])
+    assert good in ranked
+    assert bad not in ranked
+
+
+def test_rank_keeps_unknown_signal():
+    unknown = net("00:00:00:00:00:01", "WPA2", signal=-1, channel=6)
+    assert unknown in selector.rank([unknown])
 
 
 def test_score_ordering_open_and_wep_highest():

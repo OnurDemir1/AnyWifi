@@ -13,7 +13,7 @@ from anywifi import __version__
 from anywifi.attacks import chain_for
 from anywifi.config import DEFAULT_SCAN_TIME, LOOT_DIR
 from anywifi.core import deps, platform
-from anywifi.core.interface import InterfaceManager, list_wireless
+from anywifi.core.interface import InterfaceManager, iw_interfaces
 from anywifi.core.runner import Runner
 from anywifi.crack import cracker
 from anywifi.model import AttackContext, AttackResult, Network
@@ -231,14 +231,17 @@ class Engine:
             if not match:
                 self.reporter.log(f"[!] Target not found: {self.args.target}", "red")
             return match
-        ranked = selector.rank(networks, include_open=True)
-        # By default, let the user choose. -y (hands-off) or a non-interactive
-        # terminal skips the prompt and auto-attacks everything (easiest first).
+        # `displayed` matches the table order exactly (same sort) so the numbers
+        # the user types line up with the rows they see.
+        displayed = sorted(networks, key=selector.attack_score, reverse=True)
+        auto_list = selector.rank(networks, include_open=True)
+        # -y (hands-off) or a non-interactive terminal → auto-attack all.
         if self.args.yes or not sys.stdin.isatty():
-            return ranked
-        return self._interactive_pick(ranked)
+            return auto_list
+        return self._interactive_pick(displayed, auto_list)
 
-    def _interactive_pick(self, ranked: list[Network]) -> list[Network]:
+    def _interactive_pick(self, displayed: list[Network],
+                          auto_list: list[Network]) -> list[Network]:
         self.reporter.log(
             "Pick target(s): number(s) like 1 or 1,3  |  "
             "Enter = auto-attack all (easiest first)  |  q = quit", "cyan")
@@ -249,16 +252,16 @@ class Engine:
         if raw in ("q", "quit", "exit"):
             return []
         if not raw:
-            return ranked
+            return auto_list
         idxs = []
         for tok in raw.split(","):
             tok = tok.strip()
-            if tok.isdigit() and 1 <= int(tok) <= len(ranked):
+            if tok.isdigit() and 1 <= int(tok) <= len(displayed):
                 idxs.append(int(tok) - 1)
         if not idxs:
             self.reporter.log("[!] No valid selection — auto-attacking all.", "yellow")
-            return ranked
-        return [ranked[i] for i in idxs]
+            return auto_list
+        return [displayed[i] for i in idxs]
 
     def _attack_network(self, net: Network, ctx: AttackContext) -> None:
         if net.is_open:
@@ -266,6 +269,10 @@ class Engine:
                                message="Open network — no password required")
             self.reporter.result(res)
             self.results.append(res)
+            return
+
+        if net.channel <= 0:
+            self.reporter.log(f"  [-] Skipping (unknown channel): {net.label()}", "yellow")
             return
 
         chain = chain_for(net)
@@ -311,8 +318,13 @@ class Engine:
             res.message = "Password cracked"
 
     def _pick_interface(self) -> Optional[str]:
-        ifaces = list_wireless(self.runner)
-        return ifaces[0] if ifaces else None
+        # Prefer a normal (managed) interface over a leftover monitor one.
+        pairs = iw_interfaces(self.runner)
+        managed = [name for name, typ in pairs if typ != "monitor"]
+        if managed:
+            return managed[0]
+        names = [name for name, _ in pairs]
+        return names[0] if names else None
 
     def _on_signal(self, signum, frame):
         self.reporter.log("\n[!] Interrupted — cleaning up...", "yellow")
