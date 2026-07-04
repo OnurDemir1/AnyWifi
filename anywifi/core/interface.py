@@ -8,30 +8,42 @@ from typing import Optional
 from anywifi.core.runner import Runner
 
 _IFACE_RE = re.compile(r"^\s*Interface\s+(\S+)", re.MULTILINE)
-_MON_ENABLED_RE = re.compile(r"on\s+\[[^\]]+\](\w+)\)")
 
 
 def list_wireless(runner: Runner) -> list[str]:
-    """Return wireless interfaces (`iw dev`)."""
+    """Return wireless interface names (`iw dev`)."""
     res = runner.run(["iw", "dev"])
     if res.ok and res.stdout:
         return _IFACE_RE.findall(res.stdout)
     return []
 
 
-def _monitor_iface_from_iw(runner: Runner) -> Optional[str]:
-    """Find the first interface with type=monitor in `iw dev`."""
+def iw_interfaces(runner: Runner) -> list[tuple]:
+    """Return (name, type) pairs from `iw dev`, e.g. ('wlan0mon', 'monitor')."""
     res = runner.run(["iw", "dev"])
-    if not res.ok:
+    pairs: list[tuple] = []
+    name: Optional[str] = None
+    for line in (res.stdout or "").splitlines():
+        m = re.match(r"\s*Interface\s+(\S+)", line)
+        if m:
+            name = m.group(1)
+            continue
+        t = re.match(r"\s*type\s+(\S+)", line)
+        if t and name:
+            pairs.append((name, t.group(1)))
+    return pairs
+
+
+def monitor_iface(runner: Runner, prefer: Optional[str] = None) -> Optional[str]:
+    """Find an interface currently in monitor mode; prefer one related to `prefer`."""
+    monitors = [name for name, typ in iw_interfaces(runner) if typ == "monitor"]
+    if not monitors:
         return None
-    # scan each "Interface X ... type Y" block
-    blocks = re.split(r"(?=^\s*Interface\s+)", res.stdout, flags=re.MULTILINE)
-    for blk in blocks:
-        name = re.search(r"Interface\s+(\S+)", blk)
-        typ = re.search(r"type\s+(\S+)", blk)
-        if name and typ and typ.group(1) == "monitor":
-            return name.group(1)
-    return None
+    if prefer:
+        for m in monitors:
+            if m == prefer or m.startswith(prefer) or prefer.startswith(m):
+                return m
+    return monitors[0]
 
 
 class InterfaceManager:
@@ -51,20 +63,15 @@ class InterfaceManager:
             self.runner.run(["airmon-ng", "check", "kill"])
             self._killed_services = True
 
-        res = self.runner.run(["airmon-ng", "start", iface])
-        mon = None
-        if res.ok and res.stdout:
-            m = _MON_ENABLED_RE.search(res.stdout)
-            if m:
-                mon = m.group(1)
-        # If airmon-ng didn't rename the interface, confirm via iw
+        self.runner.run(["airmon-ng", "start", iface])
+
+        # Authoritative check: ask iw which interface is actually in monitor mode.
+        mon = monitor_iface(self.runner, prefer=iface)
         if not mon:
-            mon = _monitor_iface_from_iw(self.runner)
+            # airmon-ng didn't do it — try manually with iw
+            mon = self._manual_monitor(iface)
         if not mon and self.runner.dry_run:
             mon = iface + "mon"
-        if not mon:
-            # Last resort: enable monitor mode manually with iw
-            mon = self._manual_monitor(iface)
         self.monitor_iface = mon
         return mon
 
@@ -72,7 +79,7 @@ class InterfaceManager:
         self.runner.run(["ip", "link", "set", iface, "down"])
         self.runner.run(["iw", "dev", iface, "set", "type", "monitor"])
         self.runner.run(["ip", "link", "set", iface, "up"])
-        mon = _monitor_iface_from_iw(self.runner)
+        mon = monitor_iface(self.runner, prefer=iface)
         return mon or (iface if self.runner.dry_run else None)
 
     def set_channel(self, channel: int) -> None:
