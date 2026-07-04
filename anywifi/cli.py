@@ -275,6 +275,11 @@ class Engine:
             self.reporter.log(f"  [-] Skipping (unknown channel): {net.label()}", "yellow")
             return
 
+        if net.is_transition:
+            self.reporter.log(
+                "  [i] WPA3-Transition (mixed) network → downgrading to the WPA2 side "
+                "(PMKID/handshake)", "cyan")
+
         chain = chain_for(net)
         if not chain:
             self.reporter.log(f"  [-] No applicable vector: {net.label()}", "yellow")

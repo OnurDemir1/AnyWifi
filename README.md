@@ -62,10 +62,24 @@ Full list: `anywifi --help`.
    - WEP — recover the key from captured traffic
    - WPS — Pixie-Dust, then PIN bruteforce
    - WPA/WPA2 — PMKID (no client needed) or 4-way handshake via deauth
-   - WPA3 — targets the WPA2 side on mixed networks; pure WPA3 is skipped
-     (it can't be cracked offline)
+   - WPA3 — see below
 3. Cracks any captured handshake/PMKID with `rockyou.txt` or your wordlist.
 4. Saves captures and cracked passwords under `loot/`.
+
+## WPA3
+
+WPA3 is handled realistically (no evil-twin / captive-portal — that's social
+engineering and out of scope):
+
+- **Transition (mixed) mode** — the practical WPA3 attack. These APs broadcast
+  WPA2 + WPA3 under one SSID, so the tool automatically targets the **WPA2 side**
+  (PMKID / 4-way handshake) and cracks it offline. This runs by default.
+- **Pure WPA3-SAE** — SAE can't be cracked offline and PMF blocks deauth, so it's
+  skipped by default. There's an **opt-in, experimental** Dragonblood timing
+  side-channel (`sudo anywifi --only wpa3`) using `dragontime` + `dragonforce`. It
+  only works if the AP enables MODP group 22/23/24 (most don't) and needs an
+  Atheros card with the `ath_masker` module — see
+  [dragondrain-and-time](https://github.com/vanhoefm/dragondrain-and-time).
 
 ## Requirements
 

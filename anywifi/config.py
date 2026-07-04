@@ -15,6 +15,13 @@ HANDSHAKE_CAPTURE_TIME = 60     # handshake wait time
 DEAUTH_COUNT = 6                # deauth packets sent per round
 WPS_PIXIE_TIMEOUT = 180         # reaver pixie-dust upper bound
 WEP_ATTACK_TIME = 600           # WEP IV collection upper bound
+DRAGONTIME_DURATION = 90        # dragontime timing measurement duration
+
+# WPA3 Dragonblood timing side-channel (experimental).
+# Timing only leaks if the AP enables MODP group 22/23/24 (most don't).
+DRAGONTIME_GROUP = 24
+DRAGONTIME_WAIT_MS = 250        # -i: wait after a reply
+DRAGONTIME_TIMEOUT_MS = 750     # -t: retransmit timeout
 
 # --- Wordlist search paths (tried in order) ---
 def _rockyou_candidates() -> list[str]:

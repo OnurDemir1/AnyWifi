@@ -15,7 +15,8 @@ CORE_BINARIES = [
     "hashcat",                                                 # cracking (22000)
     "iw",                                                      # interface management
 ]
-OPTIONAL_BINARIES = ["bully", "wpa_supplicant", "macchanger"]
+OPTIONAL_BINARIES = ["bully", "wpa_supplicant", "macchanger",
+                     "dragontime", "dragonforce"]   # WPA3 Dragonblood (not in apt)
 
 # binary -> package name (per package manager)
 BINARY_PACKAGE = {
