@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Loot / capture output — keep out of the repo
+loot/
+captures/
+*.cap
+*.pcap
+*.pcapng
+*.hccapx
+*.22000
+*.hc22000
+*.potfile
+hashcat.potfile
+
+# Wordlists (rockyou and other large files)
+wordlists/
+*.rockyou
+rockyou.txt
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

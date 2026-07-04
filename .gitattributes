@@ -1,0 +1,3 @@
+# Consistent LF line endings for all text files
+* text=auto eol=lf
+*.py text eol=lf
