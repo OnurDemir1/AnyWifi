@@ -11,10 +11,27 @@ need Linux (Kali is easiest) with a compatible adapter, run as root.
 
 ## Install
 
+No install needed — clone and run it. The only Python dependency is `rich`
+(and it still works without it, just without colors).
+
 ```
 git clone https://github.com/OnurDemir1/AnyWifi
 cd AnyWifi
-pip install -e .
+sudo python3 -m anywifi
+```
+
+For colored output, optionally install rich (Kali blocks plain `pip`, so use apt):
+
+```
+sudo apt install -y python3-rich
+```
+
+Optional — install the `anywifi` command:
+
+```
+pipx install .
+# or, to make it available to sudo/root system-wide:
+sudo pip install --break-system-packages .
 ```
 
 ## Usage
@@ -22,23 +39,24 @@ pip install -e .
 Just run it:
 
 ```
-sudo anywifi
+sudo python3 -m anywifi
 ```
 
-That's all. It finds the interface, installs any missing tools, scans, and
-attacks the easiest target automatically.
+That's all. It finds the interface, offers to install any missing tools, scans,
+and attacks the easiest target automatically.
 
 Other options:
 
 ```
-sudo anywifi -y                  run without asking any questions
-sudo anywifi --interactive       choose the target yourself
-sudo anywifi --target <BSSID>    attack one specific network
-sudo anywifi -w mylist.txt       use your own wordlist
-anywifi --dry-run                show the commands without running them
+sudo python3 -m anywifi -y                  run without asking any questions
+sudo python3 -m anywifi --interactive       choose the target yourself
+sudo python3 -m anywifi --target <BSSID>    attack one specific network
+sudo python3 -m anywifi -w mylist.txt       use your own wordlist
+python3 -m anywifi --dry-run                show the commands without running them
 ```
 
-Full list: `anywifi --help`.
+(If you installed the command, you can use `sudo anywifi` instead of
+`sudo python3 -m anywifi`.) Full list: `python3 -m anywifi --help`.
 
 ## How it works
 
