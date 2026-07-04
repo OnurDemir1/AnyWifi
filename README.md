@@ -39,14 +39,14 @@ Just run it, from anywhere:
 sudo anywifi
 ```
 
-That's all. It finds the interface, offers to install any missing tools, scans,
-and attacks the easiest target automatically.
+It finds the interface, offers to install any missing tools, and scans. Then it
+shows the networks and asks which one(s) to attack — press **Enter** to
+auto-attack the easiest first, or type a number (e.g. `1` or `1,3`) to pick.
 
 Other options:
 
 ```
-sudo anywifi -y                  run without asking any questions
-sudo anywifi --interactive       choose the target yourself
+sudo anywifi -y                  hands-off: auto-attack all, no questions
 sudo anywifi --target <BSSID>    attack one specific network
 sudo anywifi -w mylist.txt       use your own wordlist
 anywifi --dry-run                show the commands without running them

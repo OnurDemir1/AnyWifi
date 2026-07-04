@@ -23,15 +23,15 @@ from anywifi.target import selector
 
 _EPILOG = """\
 examples:
-  sudo anywifi                     scan everything and auto-attack the easiest target
-  sudo anywifi -y                  same, but never ask questions (fully hands-off)
-  sudo anywifi --interactive       pick targets from the scan table
+  sudo anywifi                     scan, then let you pick a target (Enter = auto)
+  sudo anywifi -y                  fully hands-off: auto-attack all, no questions
   sudo anywifi --target <BSSID>    attack one specific network
   sudo anywifi --only pmkid,handshake -w rockyou.txt
   anywifi --dry-run                print the commands without running them
 
-Just run `sudo anywifi`. The interface, dependencies and wordlist are found
-automatically. Requires Linux (Kali recommended) and a monitor-mode adapter.
+Just run `sudo anywifi`. After the scan it asks which network(s) to attack —
+press Enter to auto-attack the easiest first. The interface, dependencies and
+wordlist are found automatically. Requires Linux (Kali) + a monitor-mode adapter.
 """
 
 
@@ -49,7 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scan-time", type=int, default=DEFAULT_SCAN_TIME,
                    help=f"scan duration in seconds (default: {DEFAULT_SCAN_TIME})")
     p.add_argument("--target", help="attack only this BSSID")
-    p.add_argument("--interactive", action="store_true", help="choose targets from the scan table")
+    p.add_argument("--interactive", action="store_true",
+                   help="choose targets from the scan table (this is the default; use -y to skip)")
     p.add_argument("--only", help="run only these vectors (comma-separated): "
                                   "wep,wps-pixie,pmkid,handshake,wps-pin")
     p.add_argument("--install-deps", action="store_true", help="install missing tools and exit")
@@ -231,14 +232,21 @@ class Engine:
                 self.reporter.log(f"[!] Target not found: {self.args.target}", "red")
             return match
         ranked = selector.rank(networks, include_open=True)
-        if self.args.interactive and not self.args.yes:
-            return self._interactive_pick(ranked)
-        return ranked
+        # By default, let the user choose. -y (hands-off) or a non-interactive
+        # terminal skips the prompt and auto-attacks everything (easiest first).
+        if self.args.yes or not sys.stdin.isatty():
+            return ranked
+        return self._interactive_pick(ranked)
 
     def _interactive_pick(self, ranked: list[Network]) -> list[Network]:
+        self.reporter.log(
+            "Pick target(s): number(s) like 1 or 1,3  |  "
+            "Enter = auto-attack all (easiest first)  |  q = quit", "cyan")
         try:
-            raw = input("Target # (comma-separated, empty = all): ").strip()
+            raw = input("> ").strip().lower()
         except (EOFError, KeyboardInterrupt):
+            return []
+        if raw in ("q", "quit", "exit"):
             return []
         if not raw:
             return ranked
@@ -247,6 +255,9 @@ class Engine:
             tok = tok.strip()
             if tok.isdigit() and 1 <= int(tok) <= len(ranked):
                 idxs.append(int(tok) - 1)
+        if not idxs:
+            self.reporter.log("[!] No valid selection — auto-attacking all.", "yellow")
+            return ranked
         return [ranked[i] for i in idxs]
 
     def _attack_network(self, net: Network, ctx: AttackContext) -> None:
