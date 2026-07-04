@@ -11,35 +11,32 @@ need Linux (Kali is easiest) with a compatible adapter, run as root.
 
 ## Install
 
-No install needed — clone and run it. The only Python dependency is `rich`
-(and it still works without it, just without colors).
+Clone it and run the installer. This puts a global `anywifi` command in
+`/usr/local/bin`, so you can run it from any directory. No pip needed.
 
 ```
 git clone https://github.com/OnurDemir1/AnyWifi
 cd AnyWifi
-sudo python3 -m anywifi
+sudo ./install.sh
 ```
 
-For colored output, optionally install rich (Kali blocks plain `pip`, so use apt):
+For colored output, optionally install rich (it works without it too):
 
 ```
 sudo apt install -y python3-rich
 ```
 
-Optional — install the `anywifi` command:
+To uninstall: `sudo rm /usr/local/bin/anywifi`.
 
-```
-pipx install .
-# or, to make it available to sudo/root system-wide:
-sudo pip install --break-system-packages .
-```
+(No-install alternative: just run `sudo python3 -m anywifi` from inside the
+cloned folder.)
 
 ## Usage
 
-Just run it:
+Just run it, from anywhere:
 
 ```
-sudo python3 -m anywifi
+sudo anywifi
 ```
 
 That's all. It finds the interface, offers to install any missing tools, scans,
@@ -48,15 +45,14 @@ and attacks the easiest target automatically.
 Other options:
 
 ```
-sudo python3 -m anywifi -y                  run without asking any questions
-sudo python3 -m anywifi --interactive       choose the target yourself
-sudo python3 -m anywifi --target <BSSID>    attack one specific network
-sudo python3 -m anywifi -w mylist.txt       use your own wordlist
-python3 -m anywifi --dry-run                show the commands without running them
+sudo anywifi -y                  run without asking any questions
+sudo anywifi --interactive       choose the target yourself
+sudo anywifi --target <BSSID>    attack one specific network
+sudo anywifi -w mylist.txt       use your own wordlist
+anywifi --dry-run                show the commands without running them
 ```
 
-(If you installed the command, you can use `sudo anywifi` instead of
-`sudo python3 -m anywifi`.) Full list: `python3 -m anywifi --help`.
+Full list: `anywifi --help`.
 
 ## How it works
 
