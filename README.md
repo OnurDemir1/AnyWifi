@@ -39,9 +39,15 @@ Just run it, from anywhere:
 sudo anywifi
 ```
 
-It finds the interface, offers to install any missing tools, and scans. Then it
-shows the networks and asks which one(s) to attack — press **Enter** to
-auto-attack the easiest first, or type a number (e.g. `1` or `1,3`) to pick.
+It finds the interface, offers to install any missing tools, and scans (2.4 and
+5 GHz). Then it shows the networks and asks which one(s) to attack — press
+**Enter** to auto-attack the easiest first, or type a number (e.g. `1` or `1,3`)
+to pick.
+
+While it works you get a clean, live view: each phase (PMKID, handshake,
+cracking…) shows as a single line with a spinner and a running timer, so you can
+always tell it's still going and how long it's taken. During cracking it shows a
+progress bar with how many passwords have been tried and the current speed.
 
 Other options:
 
@@ -49,6 +55,7 @@ Other options:
 sudo anywifi -y                  hands-off: auto-attack all, no questions
 sudo anywifi --target <BSSID>    attack one specific network
 sudo anywifi -w mylist.txt       use your own wordlist
+sudo anywifi -v                  verbose: also print the raw tool commands
 anywifi --dry-run                show the commands without running them
 ```
 

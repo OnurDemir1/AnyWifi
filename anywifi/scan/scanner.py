@@ -143,6 +143,9 @@ class Scanner:
             "airodump-ng", interface,
             "--output-format", "csv",
             "--write-interval", "1",
+            # Sweep 2.4 GHz + 5 GHz so 5 GHz APs show up too (ignored per-channel
+            # on 2.4-only adapters). This surfaces more networks to choose from.
+            "--band", "abg",
             "-w", prefix,
         ]
         self.runner.run_timed(cmd, duration=seconds, capture=True)

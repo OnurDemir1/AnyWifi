@@ -62,8 +62,9 @@ CLIENT_BONUS_MAX = 32
 # Signal: map -30 dBm (very strong) .. -90 dBm (weak) onto 0..40
 SIGNAL_SCORE_MAX = 40
 
-# Noise floor: networks weaker than this dBm are filtered out by default
-MIN_SIGNAL_DBM = -85
+# Noise floor: networks weaker than this dBm are filtered out by default.
+# Kept low so more (even weak) networks remain selectable targets.
+MIN_SIGNAL_DBM = -90
 
 # --- External tools ---
 AIRCRACK_SUITE = ["airmon-ng", "airodump-ng", "aireplay-ng", "aircrack-ng"]

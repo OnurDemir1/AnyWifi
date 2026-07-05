@@ -49,12 +49,14 @@ class PmkidAttack(Attack):
         # Lock the channel; the hcxdumptool command is built per version.
         runner.run(["iw", "dev", iface, "set", "channel", str(net.channel)])
         cmd = _build_capture_cmd(runner, iface, pcapng, net.channel, ctx.dry_run)
+        ctx.status("listening for a PMKID (no clients needed)…")
         runner.run_timed(cmd, duration=PMKID_CAPTURE_TIME, capture=True)
 
         if not os.path.exists(pcapng) and not ctx.dry_run:
-            return self._result(net, success=False, message="Capture file was not created")
+            return self._result(net, success=False, message="AP did not offer a PMKID")
 
         # Convert to hashcat 22000 format
+        ctx.status("checking the capture for a PMKID…")
         runner.run(["hcxpcapngtool", "-o", hashfile, pcapng], timeout=60)
 
         target_hash = _filter_for_bssid(hashfile, net.bssid, pmkid_only=True)

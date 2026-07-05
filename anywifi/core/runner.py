@@ -7,7 +7,7 @@ import signal
 import subprocess
 import time
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 
 @dataclass
@@ -24,10 +24,19 @@ class Result:
 class Runner:
     """Runs external commands. When dry_run=True it only prints them."""
 
-    def __init__(self, dry_run: bool = False, log=None):
+    def __init__(self, dry_run: bool = False, verbose: bool = False, log=None):
         self.dry_run = dry_run
+        self.verbose = verbose
         # log(msg, style) — injected by the reporter/console
         self._log = log or (lambda msg, style="dim": None)
+
+    def _echo(self, text: str) -> None:
+        """Echo the raw command line — only in verbose or dry-run mode.
+
+        By default the user sees a clean, phase-oriented view instead of a
+        stream of `$ tool ...` lines."""
+        if self.verbose or self.dry_run:
+            self._log(text, "dim")
 
     # --- discovery ---
     @staticmethod
@@ -46,7 +55,7 @@ class Runner:
         input_text: Optional[str] = None,
     ) -> Result:
         printable = " ".join(cmd)
-        self._log(f"$ {printable}", "dim")
+        self._echo(f"$ {printable}")
         if self.dry_run:
             return Result(0, "", "")
         try:
@@ -82,7 +91,7 @@ class Runner:
     ) -> Result:
         """Start the command, run it for `duration` seconds, then stop it gracefully."""
         printable = " ".join(cmd)
-        self._log(f"$ {printable}   (~{duration}s)", "dim")
+        self._echo(f"$ {printable}   (~{duration}s)")
         if self.dry_run:
             return Result(0, "", "")
         try:
@@ -112,10 +121,59 @@ class Runner:
             pass
         return Result(proc.returncode or 0, out or "", err or "")
 
+    # --- streaming run (live progress from long-running crackers) ---
+    def run_stream(
+        self,
+        cmd: Sequence[str],
+        on_line: Optional[Callable[[str], None]] = None,
+        timeout: Optional[int] = None,
+    ) -> Result:
+        """Run a command, feeding each output line to `on_line` as it arrives.
+
+        stderr is merged into stdout so progress lines from tools like hashcat
+        and aircrack-ng (which update in place with '\\r') are streamed live.
+        The full combined output is still returned in Result.stdout.
+        """
+        self._echo(f"$ {' '.join(cmd)}")
+        if self.dry_run:
+            return Result(0, "", "")
+        try:
+            proc = subprocess.Popen(
+                list(cmd),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                text=True,
+                bufsize=1,
+            )
+        except FileNotFoundError:
+            return Result(127, "", f"command not found: {cmd[0]}")
+
+        collected: list[str] = []
+        deadline = (time.time() + timeout) if timeout else None
+        try:
+            # Universal-newline mode treats '\r', '\n' and '\r\n' as line breaks,
+            # so carriage-return progress updates arrive one at a time.
+            for line in proc.stdout:  # type: ignore[union-attr]
+                collected.append(line)
+                if on_line:
+                    on_line(line.rstrip("\r\n"))
+                if deadline and time.time() > deadline:
+                    self._terminate(proc)
+                    break
+        except KeyboardInterrupt:
+            self._terminate(proc)
+            raise
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            pass
+        return Result(proc.returncode or 0, "".join(collected), "")
+
     # --- concurrent background processes (capture + injection) ---
     def spawn(self, cmd: Sequence[str]) -> Optional[subprocess.Popen]:
         """Start the command in the background and return the Popen (None on dry-run)."""
-        self._log(f"$ {' '.join(cmd)}   (background)", "dim")
+        self._echo(f"$ {' '.join(cmd)}   (background)")
         if self.dry_run:
             return None
         try:

@@ -48,9 +48,11 @@ class WepAttack(Attack):
             while time.time() < deadline:
                 if ctx.dry_run:
                     break
+                ctx.status("collecting IVs via ARP-replay…")
                 time.sleep(20)
                 cap = _latest(prefix)
                 if cap:
+                    ctx.status("trying to recover the WEP key…")
                     password = crack_wep(runner, cap, net.bssid)
                     if password:
                         break

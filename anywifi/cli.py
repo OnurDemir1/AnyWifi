@@ -58,6 +58,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--stop-on-first", action="store_true", help="stop after the first cracked network")
     p.add_argument("-y", "--yes", action="store_true", help="assume yes; never prompt (hands-off)")
     p.add_argument("--no-color", action="store_true", help="disable colored output")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="show the raw tool commands being run (default: clean phase view)")
     p.add_argument("--dry-run", action="store_true", help="print commands without running them")
     p.add_argument("--version", action="version", version=f"AnyWifi {__version__}")
     return p
@@ -66,8 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
 class Engine:
     def __init__(self, args: argparse.Namespace):
         self.args = args
-        self.reporter = Reporter(no_color=args.no_color)
-        self.runner = Runner(dry_run=args.dry_run, log=self.reporter.log)
+        # Live spinners/timers only make sense in the clean view; --verbose and
+        # --dry-run interleave raw command lines, so fall back to static output.
+        live = not (args.verbose or args.dry_run)
+        self.reporter = Reporter(no_color=args.no_color, live=live)
+        self.runner = Runner(dry_run=args.dry_run, verbose=args.verbose,
+                             log=self.reporter.log)
         self.sys = platform.detect()
         self.iface_mgr = InterfaceManager(self.runner)
         self.output_dir = Path(args.output)
@@ -194,8 +200,9 @@ class Engine:
         self.reporter.log(f"[+] Monitor interface: {mon}", "green")
 
         scanner = Scanner(self.runner)
-        self.reporter.log(f"[*] Scanning (~{self.args.scan_time}s)...", "cyan")
-        networks = scanner.scan_linux(mon, self.args.scan_time)
+        self.reporter.log(f"[*] Scanning nearby networks (~{self.args.scan_time}s)...", "cyan")
+        with self.reporter.activity("Scanning for networks"):
+            networks = scanner.scan_linux(mon, self.args.scan_time)
         if not networks:
             self.reporter.log("[!] No networks found.", "red")
             return 1
@@ -264,6 +271,8 @@ class Engine:
         return [displayed[i] for i in idxs]
 
     def _attack_network(self, net: Network, ctx: AttackContext) -> None:
+        self.reporter.target_header(net)
+
         if net.is_open:
             res = AttackResult(network=net, vector="open", success=True,
                                message="Open network — no password required")
@@ -288,14 +297,17 @@ class Engine:
         for attack in chain:
             if not ctx.wants(attack.vector):
                 continue
-            self.reporter.attack_step(net, attack.label)
-            try:
-                res = attack.run(net, ctx)
-            except KeyboardInterrupt:
-                raise
-            except Exception as exc:  # keep going even if one vector blows up
-                res = AttackResult(network=net, vector=attack.vector,
-                                   success=False, message=f"error: {exc}")
+            with self.reporter.activity(attack.label) as act:
+                ctx.on_status = act.detail
+                try:
+                    res = attack.run(net, ctx)
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:  # keep going even if one vector blows up
+                    res = AttackResult(network=net, vector=attack.vector,
+                                       success=False, message=f"error: {exc}")
+                finally:
+                    ctx.on_status = None
 
             # Captured but not cracked yet → try cracking
             if res.success and res.password is None and (res.hash_file or res.capture_file):
@@ -311,12 +323,21 @@ class Engine:
         if not wl:
             res.message += " (no wordlist — cracking skipped)"
             return
-        pw = None
-        if res.hash_file:
-            pw = cracker.crack_22000(self.runner, res.hash_file, wl)
-        if not pw and res.capture_file and res.capture_file.endswith(".cap"):
-            pw = cracker.crack_handshake_aircrack(
-                self.runner, res.capture_file, res.network.bssid, wl)
+        name = Path(wl).name
+        have_hashcat = self.runner.dry_run or self.runner.has("hashcat")
+        with self.reporter.activity(f"Cracking with {name}") as act:
+            def on_prog(tried: int, total: int, speed: str) -> None:
+                act.detail(self.reporter.fmt_progress(tried, total, speed))
+
+            pw = None
+            # Prefer hashcat (22000). Only fall back to aircrack when hashcat
+            # can't be used — running both over the same wordlist is redundant
+            # and doubles the wait for nothing.
+            if res.hash_file and have_hashcat:
+                pw = cracker.crack_22000(self.runner, res.hash_file, wl, on_progress=on_prog)
+            elif res.capture_file and res.capture_file.endswith(".cap"):
+                pw = cracker.crack_handshake_aircrack(
+                    self.runner, res.capture_file, res.network.bssid, wl, on_progress=on_prog)
         if pw:
             res.password = pw
             res.success = True

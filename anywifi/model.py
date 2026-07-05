@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 
 @dataclass
@@ -89,6 +89,15 @@ class AttackContext:
     wordlist: Optional[str] = None
     dry_run: bool = False
     only: Optional[set[str]] = None  # only these vectors (None = all)
+    on_status: Optional[Callable[[str], None]] = None  # live progress detail sink
 
     def wants(self, vector: str) -> bool:
         return self.only is None or vector in self.only
+
+    def status(self, text: str) -> None:
+        """Report a short live-status update for the current step (best effort)."""
+        if self.on_status is not None:
+            try:
+                self.on_status(text)
+            except Exception:
+                pass
