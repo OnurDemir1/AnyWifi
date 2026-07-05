@@ -309,11 +309,16 @@ class Engine:
                 finally:
                     ctx.on_status = None
 
-            # Captured but not cracked yet → try cracking
+            # Captured but not cracked yet → show the capture win first, THEN
+            # crack (which can take a long time), then show the crack result.
             if res.success and res.password is None and (res.hash_file or res.capture_file):
+                self.reporter.result(res)      # e.g. "[+] Handshake captured"
                 self._crack(res)
+                if res.cracked:
+                    self.reporter.result(res)  # "[+] CRACKED: ... password: ..."
+            else:
+                self.reporter.result(res)
 
-            self.reporter.result(res)
             self.results.append(res)
             if res.cracked:
                 return  # this network is done

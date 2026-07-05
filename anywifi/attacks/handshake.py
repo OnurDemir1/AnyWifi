@@ -68,9 +68,10 @@ class HandshakeAttack(Attack):
             runner.run(["hcxpcapngtool", "-o", hashfile, cap], timeout=60)
             if os.path.exists(hashfile):
                 return self._result(net, success=True, hash_file=hashfile,
-                                    capture_file=cap, message="Handshake captured")
+                                    capture_file=cap,
+                                    message="Handshake captured — deauth worked")
         return self._result(net, success=True, capture_file=cap,
-                            message="Handshake captured (.cap)")
+                            message="Handshake captured — deauth worked (.cap)")
 
     def _deauth(self, runner, iface: str, net: Network) -> None:
         if net.clients:
