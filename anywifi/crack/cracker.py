@@ -54,7 +54,14 @@ def _stream(runner: Runner, cmd: list, on_progress: ProgressCb, parse) -> str:
         if parse(line, state):
             on_progress(state["tried"], state["total"], state["speed"])
 
-    return runner.run_stream(cmd, on_line, timeout=None).stdout
+    # When stdout is a pipe, glibc full-buffers the child's output, so the live
+    # counter would freeze until the buffer fills. Force unbuffered output so
+    # progress lines arrive immediately — aircrack updates with '\r' (no '\n'),
+    # so we need -o0 (unbuffered), not -oL (line-buffered on '\n').
+    run_cmd = list(cmd)
+    if shutil.which("stdbuf"):
+        run_cmd = ["stdbuf", "-o0", "-e0"] + run_cmd
+    return runner.run_stream(run_cmd, on_line, timeout=None).stdout
 
 
 # --------------------------------------------------------------------------

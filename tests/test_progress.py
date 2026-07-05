@@ -43,10 +43,11 @@ class StreamRunner:
         return True
 
     def run_stream(self, cmd, on_line=None, timeout=None):
+        # cmd may be prefixed with `stdbuf -o0 -e0` on systems that have it.
         for ln in self.lines:
             if on_line:
                 on_line(ln)
-        if cmd[0] == "hashcat":
+        if "hashcat" in cmd:
             outfile = cmd[cmd.index("-o") + 1]
             with open(outfile, "w", encoding="utf-8") as fh:
                 fh.write(self.secret + "\n")
