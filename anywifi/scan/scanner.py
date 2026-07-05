@@ -149,21 +149,23 @@ class Scanner:
     def __init__(self, runner: Runner):
         self.runner = runner
 
-    def scan(self, interface: str, seconds: int = DEFAULT_SCAN_TIME) -> list[Network]:
-        return self.scan_linux(interface, seconds)
+    def scan(self, interface: str, seconds: int = DEFAULT_SCAN_TIME,
+             band: str = "") -> list[Network]:
+        return self.scan_linux(interface, seconds, band=band)
 
-    def scan_linux(self, interface: str, seconds: int) -> list[Network]:
+    def scan_linux(self, interface: str, seconds: int, band: str = "") -> list[Network]:
         tmpdir = tempfile.mkdtemp(prefix="anywifi_scan_")
         prefix = os.path.join(tmpdir, "scan")
         cmd = [
             "airodump-ng", interface,
             "--output-format", "csv",
             "--write-interval", "1",
-            # Sweep 2.4 GHz + 5 GHz so 5 GHz APs show up too (ignored per-channel
-            # on 2.4-only adapters). This surfaces more networks to choose from.
-            "--band", "abg",
             "-w", prefix,
         ]
+        # 5 GHz sweep is opt-in: `--band abg` makes some 2.4-only adapters
+        # abort the scan (finding nothing), so only add it when asked.
+        if band:
+            cmd += ["--band", band]
         self.runner.run_timed(cmd, duration=seconds, capture=True)
 
         networks: list[Network] = []

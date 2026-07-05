@@ -99,9 +99,6 @@ class Runner:
                 list(cmd),
                 stdout=subprocess.PIPE if capture else None,
                 stderr=subprocess.PIPE if capture else None,
-                # Detach stdin so airodump-ng/wash can't switch the terminal to
-                # raw mode and corrupt the next input() prompt (target picker).
-                stdin=subprocess.DEVNULL,
                 text=True,
             )
         except FileNotFoundError:
@@ -184,7 +181,6 @@ class Runner:
                 list(cmd),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,  # keep the terminal sane for input()
             )
         except FileNotFoundError:
             self._log(f"command not found: {cmd[0]}", "red")

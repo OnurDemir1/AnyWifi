@@ -55,6 +55,7 @@ Other options:
 sudo anywifi -y                  hands-off: auto-attack all, no questions
 sudo anywifi --target <BSSID>    attack one specific network
 sudo anywifi -w mylist.txt       use your own wordlist
+sudo anywifi --5ghz              also scan 5 GHz (needs a 5 GHz-capable adapter)
 sudo anywifi -v                  verbose: also print the raw tool commands
 anywifi --dry-run                show the commands without running them
 ```

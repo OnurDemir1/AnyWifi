@@ -48,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-w", "--wordlist", help="wordlist path (default: auto-find rockyou)")
     p.add_argument("--scan-time", type=int, default=DEFAULT_SCAN_TIME,
                    help=f"scan duration in seconds (default: {DEFAULT_SCAN_TIME})")
+    p.add_argument("--5ghz", dest="five_ghz", action="store_true",
+                   help="also scan 5 GHz (needs a 5 GHz-capable adapter; off by default)")
     p.add_argument("--target", help="attack only this BSSID")
     p.add_argument("--interactive", action="store_true",
                    help="choose targets from the scan table (this is the default; use -y to skip)")
@@ -81,6 +83,7 @@ class Engine:
         self._wordlist_resolved = False
         self._wordlist: Optional[str] = None
         self.results: list[AttackResult] = []
+        self._tty_attrs = None  # saved terminal settings (to undo airodump raw mode)
 
     # --- small helpers ---
     def _confirm(self, question: str, default_yes: bool = True) -> bool:
@@ -181,6 +184,7 @@ class Engine:
     def _run_full(self) -> int:
         signal.signal(signal.SIGINT, self._on_signal)
         atexit.register(self.cleanup)
+        self._save_tty()  # remember sane terminal state before airodump/wash run
 
         iface = self.args.interface or self._pick_interface()
         if not iface:
@@ -201,10 +205,14 @@ class Engine:
 
         scanner = Scanner(self.runner)
         self.reporter.log(f"[*] Scanning nearby networks (~{self.args.scan_time}s)...", "cyan")
+        band = "abg" if self.args.five_ghz else ""
         with self.reporter.activity("Scanning for networks"):
-            networks = scanner.scan_linux(mon, self.args.scan_time)
+            networks = scanner.scan_linux(mon, self.args.scan_time, band=band)
         if not networks:
-            self.reporter.log("[!] No networks found.", "red")
+            self.reporter.log(
+                "[!] No networks found. If networks are definitely nearby, retry — "
+                "the adapter may need a moment after monitor mode. "
+                "(Add --5ghz only if your adapter supports 5 GHz.)", "red")
             return 1
         self.reporter.scan_table(networks)
 
@@ -247,11 +255,21 @@ class Engine:
             return auto_list
         return self._interactive_pick(displayed, auto_list)
 
-    @staticmethod
-    def _flush_stdin() -> None:
-        """Drop any bytes airodump-ng/wash may have left in the input buffer."""
+    def _save_tty(self) -> None:
+        """Snapshot sane terminal settings before tools like airodump touch them."""
         try:
             import termios
+            self._tty_attrs = termios.tcgetattr(sys.stdin)
+        except Exception:
+            self._tty_attrs = None
+
+    def _restore_tty(self) -> None:
+        """Undo any raw-mode the capture tools left, and drop stray input, so the
+        target-picker prompt reads cleanly."""
+        try:
+            import termios
+            if self._tty_attrs is not None:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._tty_attrs)
             termios.tcflush(sys.stdin, termios.TCIFLUSH)
         except Exception:
             pass
@@ -265,7 +283,7 @@ class Engine:
         # Re-prompt on a typo rather than silently attacking every network —
         # a mistyped number must never fan out to networks you didn't choose.
         for _ in range(3):
-            self._flush_stdin()
+            self._restore_tty()
             try:
                 raw = input("> ").strip().lower()
             except (EOFError, KeyboardInterrupt):
