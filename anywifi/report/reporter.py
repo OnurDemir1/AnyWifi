@@ -159,14 +159,9 @@ class Reporter:
             print(f"  v{__version__} — use only on networks you own or are authorized to test.\n")
 
     # --- scan table ---
-    def scan_table(self, networks: list[Network]) -> None:
+    def _build_scan_table(self, networks: list[Network], title: Optional[str]):
         ordered = sorted(networks, key=attack_score, reverse=True)
-        if not self.console:
-            for i, n in enumerate(ordered, 1):
-                print(f"{i:2}. {n.label()} wps={n.wps} clients={len(n.clients)} "
-                      f"score={attack_score(n):.0f}")
-            return
-        table = Table(title="Discovered Networks (easiest first)", show_lines=False)
+        table = Table(title=title, show_lines=False)
         table.add_column("#", justify="right", style="dim")
         table.add_column("ESSID")
         table.add_column("BSSID", style="dim")
@@ -185,7 +180,20 @@ class Reporter:
                 str(len(n.clients)),
                 f"{attack_score(n):.0f}",
             )
-        self.console.print(table)
+        return table
+
+    def scan_table(self, networks: list[Network]) -> None:
+        ordered = sorted(networks, key=attack_score, reverse=True)
+        if not self.console:
+            for i, n in enumerate(ordered, 1):
+                print(f"{i:2}. {n.label()} wps={n.wps} clients={len(n.clients)} "
+                      f"score={attack_score(n):.0f}")
+            return
+        self.console.print(self._build_scan_table(ordered, "Discovered Networks (easiest first)"))
+
+    def live_scan(self) -> "LiveScan":
+        """Context manager for a live-updating scan table (Ctrl-C to stop)."""
+        return LiveScan(self)
 
     # --- attack target header / result ---
     def target_header(self, net: Network) -> None:
@@ -237,6 +245,42 @@ class Reporter:
         }
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
+
+
+class LiveScan:
+    """A live-updating scan table; refreshes as networks are discovered."""
+
+    def __init__(self, reporter: "Reporter"):
+        self.reporter = reporter
+        self.console = reporter.console
+        self.live_ok = reporter._live_ok
+        self._live = None
+
+    def __enter__(self) -> "LiveScan":
+        if self.live_ok:
+            self._live = Live(console=self.console, transient=True,
+                              refresh_per_second=4)
+            self._live.start()
+        return self
+
+    def update(self, networks: list[Network], elapsed: float) -> None:
+        if self._live is None:
+            return
+        from rich.console import Group
+        table = self.reporter._build_scan_table(networks, None)
+        hint = Text()
+        hint.append(f"  Scanning… {int(elapsed)}s   ", "cyan")
+        hint.append(f"{len(networks)} network(s) found", "green")
+        hint.append("   ·  press Ctrl-C when your network shows up", "dim")
+        self._live.update(Group(table, hint))
+
+    def __exit__(self, *exc) -> bool:
+        if self._live is not None:
+            try:
+                self._live.stop()
+            except Exception:
+                pass
+        return False
 
 
 def _enc_text(enc: str):

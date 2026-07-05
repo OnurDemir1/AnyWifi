@@ -11,7 +11,7 @@ from typing import Optional
 
 from anywifi import __version__
 from anywifi.attacks import chain_for
-from anywifi.config import DEFAULT_SCAN_TIME, LOOT_DIR
+from anywifi.config import DEFAULT_SCAN_TIME, LIVE_SCAN_MAX, LOOT_DIR
 from anywifi.core import deps, platform
 from anywifi.core.interface import InterfaceManager, iw_interfaces
 from anywifi.core.runner import Runner
@@ -204,10 +204,8 @@ class Engine:
         self.reporter.log(f"[+] Monitor interface: {mon}", "green")
 
         scanner = Scanner(self.runner)
-        self.reporter.log(f"[*] Scanning nearby networks (~{self.args.scan_time}s)...", "cyan")
         band = "abg" if self.args.five_ghz else ""
-        with self.reporter.activity("Scanning for networks"):
-            networks = scanner.scan_linux(mon, self.args.scan_time, band=band)
+        networks = self._do_scan(scanner, mon, band)
         if not networks:
             self.reporter.log(
                 "[!] No networks found. If networks are definitely nearby, retry — "
@@ -238,6 +236,32 @@ class Engine:
         if path:
             self.reporter.log(f"[*] Report: {path}", "dim")
         return 0
+
+    def _do_scan(self, scanner: Scanner, mon: str, band: str) -> list[Network]:
+        """Live scan (watch networks appear, Ctrl-C to stop) when interactive;
+        otherwise a plain fixed-duration scan for hands-off/non-tty runs."""
+        interactive = not (self.args.yes or self.args.dry_run) and sys.stdin.isatty()
+        live = self.reporter.live_scan()
+        if not (interactive and live.live_ok):
+            self.reporter.log(f"[*] Scanning nearby networks (~{self.args.scan_time}s)...", "cyan")
+            with self.reporter.activity("Scanning for networks"):
+                return scanner.scan_linux(mon, self.args.scan_time, band=band)
+
+        self.reporter.log(
+            "[*] Live scan — watch the list below; press Ctrl-C when your "
+            "network appears to stop and choose.", "cyan")
+        # Let Ctrl-C raise KeyboardInterrupt here (stop scanning) instead of
+        # triggering the global cleanup-and-exit handler.
+        prev = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+        try:
+            with live:
+                networks = scanner.scan_live(
+                    mon, LIVE_SCAN_MAX, band=band, on_tick=live.update)
+        finally:
+            signal.signal(signal.SIGINT, prev)
+        self.reporter.log(f"[*] Scan stopped — {len(networks)} network(s).", "cyan")
+        return networks
 
     def _select_targets(self, networks: list[Network]) -> list[Network]:
         if self.args.target:

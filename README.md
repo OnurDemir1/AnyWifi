@@ -39,10 +39,12 @@ Just run it, from anywhere:
 sudo anywifi
 ```
 
-It finds the interface, offers to install any missing tools, and scans (2.4 and
-5 GHz). Then it shows the networks and asks which one(s) to attack — press
-**Enter** to auto-attack the easiest first, or type a number (e.g. `1` or `1,3`)
-to pick.
+It finds the interface, offers to install any missing tools, and starts a
+**live scan** — networks appear in a table as they're discovered. When the one
+you want shows up (e.g. your own phone hotspot), press **Ctrl-C** to stop the
+scan and choose. Then type a number (e.g. `1` or `1,3`) to pick, or press
+**Enter** to auto-attack the easiest first. (In `-y` hands-off mode it uses a
+fixed-duration scan instead.)
 
 While it works you get a clean, live view: each phase (PMKID, handshake,
 cracking…) shows as a single line with a spinner and a running timer, so you can

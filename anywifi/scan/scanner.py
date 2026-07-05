@@ -6,6 +6,8 @@ import glob
 import os
 import re
 import tempfile
+import time
+from typing import Callable, Optional
 
 from anywifi.config import DEFAULT_SCAN_TIME
 from anywifi.core.runner import Runner
@@ -168,21 +170,67 @@ class Scanner:
             cmd += ["--band", band]
         self.runner.run_timed(cmd, duration=seconds, capture=True)
 
-        networks: list[Network] = []
-        csvs = sorted(glob.glob(prefix + "*.csv"))
-        if csvs:
-            try:
-                with open(csvs[-1], "r", encoding="utf-8", errors="replace") as fh:
-                    networks = parse_airodump_csv(fh.read())
-            except OSError:
-                networks = []
+        networks = self._read_csv(prefix)
+        self._apply_wps(interface, networks, seconds=min(seconds, 15))
+        return networks
 
-        # WPS detection (optional)
-        wps_set = self.scan_wps(interface, seconds=min(seconds, 15))
+    def scan_live(
+        self,
+        interface: str,
+        max_seconds: int,
+        band: str = "",
+        on_tick: Optional[Callable[[list, float], None]] = None,
+        poll: float = 1.5,
+    ) -> list[Network]:
+        """Keep scanning and report networks as they appear until the user stops
+        it (KeyboardInterrupt) or `max_seconds` elapses. `on_tick(networks,
+        elapsed)` is called each poll so the caller can render a live view."""
+        tmpdir = tempfile.mkdtemp(prefix="anywifi_scan_")
+        prefix = os.path.join(tmpdir, "scan")
+        cmd = ["airodump-ng", interface, "--output-format", "csv",
+               "--write-interval", "1", "-w", prefix]
+        if band:
+            cmd += ["--band", band]
+
+        proc = self.runner.spawn(cmd)
+        start = time.time()
+        networks: list[Network] = []
+        try:
+            while time.time() - start < max_seconds:
+                time.sleep(poll)
+                networks = self._read_csv(prefix)
+                if on_tick:
+                    on_tick(networks, time.time() - start)
+                if proc is not None and proc.poll() is not None:
+                    break
+        except KeyboardInterrupt:
+            pass  # user stopped the scan — keep what we have
+        finally:
+            self.runner.stop(proc)
+
+        networks = self._read_csv(prefix) or networks
+        elapsed = int(time.time() - start)
+        try:
+            self._apply_wps(interface, networks, seconds=min(max(elapsed, 8), 15))
+        except KeyboardInterrupt:
+            pass  # a second Ctrl-C during the WPS check — skip it, keep networks
+        return networks
+
+    def _read_csv(self, prefix: str) -> list[Network]:
+        csvs = sorted(glob.glob(prefix + "*.csv"))
+        if not csvs:
+            return []
+        try:
+            with open(csvs[-1], "r", encoding="utf-8", errors="replace") as fh:
+                return parse_airodump_csv(fh.read())
+        except OSError:
+            return []
+
+    def _apply_wps(self, interface: str, networks: list[Network], seconds: int) -> None:
+        wps_set = self.scan_wps(interface, seconds=seconds)
         for net in networks:
             if net.bssid in wps_set:
                 net.wps = True
-        return networks
 
     def scan_wps(self, interface: str, seconds: int = 15) -> set[str]:
         if not self.runner.has("wash") and not self.runner.dry_run:

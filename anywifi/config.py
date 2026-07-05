@@ -9,7 +9,8 @@ APP_NAME = "AnyWifi"
 LOOT_DIR = "loot"
 
 # --- Timings (seconds) ---
-DEFAULT_SCAN_TIME = 25          # airodump scan duration
+DEFAULT_SCAN_TIME = 25          # airodump scan duration (fixed/hands-off mode)
+LIVE_SCAN_MAX = 300             # live scan safety cap (user normally Ctrl-C sooner)
 PMKID_CAPTURE_TIME = 45         # hcxdumptool PMKID capture duration
 HANDSHAKE_CAPTURE_TIME = 60     # handshake wait time
 DEAUTH_COUNT = 6                # deauth packets sent per round
