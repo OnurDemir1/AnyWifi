@@ -247,28 +247,48 @@ class Engine:
             return auto_list
         return self._interactive_pick(displayed, auto_list)
 
+    @staticmethod
+    def _flush_stdin() -> None:
+        """Drop any bytes airodump-ng/wash may have left in the input buffer."""
+        try:
+            import termios
+            termios.tcflush(sys.stdin, termios.TCIFLUSH)
+        except Exception:
+            pass
+
     def _interactive_pick(self, displayed: list[Network],
                           auto_list: list[Network]) -> list[Network]:
+        n = len(displayed)
         self.reporter.log(
-            "Pick target(s): number(s) like 1 or 1,3  |  "
-            "Enter = auto-attack all (easiest first)  |  q = quit", "cyan")
-        try:
-            raw = input("> ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            return []
-        if raw in ("q", "quit", "exit"):
-            return []
-        if not raw:
-            return auto_list
-        idxs = []
-        for tok in raw.split(","):
-            tok = tok.strip()
-            if tok.isdigit() and 1 <= int(tok) <= len(displayed):
-                idxs.append(int(tok) - 1)
-        if not idxs:
-            self.reporter.log("[!] No valid selection — auto-attacking all.", "yellow")
-            return auto_list
-        return [displayed[i] for i in idxs]
+            f"Pick target(s): number(s) 1-{n} like 1 or 1,3  |  "
+            "Enter = auto-attack ALL (easiest first)  |  q = quit", "cyan")
+        # Re-prompt on a typo rather than silently attacking every network —
+        # a mistyped number must never fan out to networks you didn't choose.
+        for _ in range(3):
+            self._flush_stdin()
+            try:
+                raw = input("> ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                return []
+            if raw in ("q", "quit", "exit"):
+                return []
+            if not raw:
+                return auto_list
+            idxs, bad = [], []
+            for tok in raw.replace(" ", "").split(","):
+                if not tok:
+                    continue
+                if tok.isdigit() and 1 <= int(tok) <= n:
+                    idxs.append(int(tok) - 1)
+                else:
+                    bad.append(tok)
+            if idxs and not bad:
+                return [displayed[i] for i in idxs]
+            self.reporter.log(
+                f"[!] Didn't understand '{raw}'. Enter number(s) 1-{n}, "
+                "Enter for all, or q to quit.", "yellow")
+        self.reporter.log("[!] No valid selection — quitting (nothing attacked).", "yellow")
+        return []
 
     def _attack_network(self, net: Network, ctx: AttackContext) -> None:
         self.reporter.target_header(net)

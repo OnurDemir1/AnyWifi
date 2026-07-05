@@ -61,15 +61,23 @@ class HandshakeAttack(Attack):
             return self._result(net, success=False, capture_file=cap,
                                 message="No handshake captured")
 
-        # Convert to 22000 (for hashcat); otherwise fall back to .cap + aircrack
+        # Convert to 22000 (for hashcat) and confirm it actually yielded a
+        # crackable EAPOL. airodump/aircrack sometimes flag an incomplete
+        # handshake; without this check we'd "capture" nothing and then burn
+        # time cracking an empty hash.
         ctx.status("handshake captured · preparing hash…")
         hashfile = prefix + ".22000"
         if runner.has("hcxpcapngtool") or ctx.dry_run:
             runner.run(["hcxpcapngtool", "-o", hashfile, cap], timeout=60)
-            if os.path.exists(hashfile):
+            if ctx.dry_run or _has_wpa_hash(hashfile):
                 return self._result(net, success=True, hash_file=hashfile,
                                     capture_file=cap,
                                     message="Handshake captured — deauth worked")
+            # Conversion found no EAPOL → the handshake was incomplete.
+            return self._result(net, success=False, capture_file=cap,
+                                message="Handshake looked incomplete (no crackable EAPOL) "
+                                        "— try again with a client connected")
+        # No hcxpcapngtool: keep the .cap and let aircrack validate it while cracking.
         return self._result(net, success=True, capture_file=cap,
                             message="Handshake captured — deauth worked (.cap)")
 
@@ -90,6 +98,18 @@ class HandshakeAttack(Attack):
 
 def _safe(bssid: str) -> str:
     return bssid.replace(":", "")
+
+
+def _has_wpa_hash(path: str) -> bool:
+    """True if the 22000 file holds at least one crackable WPA line."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if line.strip().lower().startswith("wpa*"):
+                    return True
+    except OSError:
+        pass
+    return False
 
 
 def _latest(prefix: str):
