@@ -116,14 +116,30 @@ def _to_int(value: str, default: int = 0) -> int:
 # --------------------------------------------------------------------------
 # WPS detection (wash)
 # --------------------------------------------------------------------------
-def parse_wash(text: str) -> set[str]:
-    """Extract the set of WPS-enabled BSSIDs from wash output."""
-    bssids: set[str] = set()
+def parse_wash_entries(text: str) -> dict[str, bool]:
+    """Parse wash output into {bssid: locked}.
+
+    wash columns after the BSSID are: Ch  dBm  WPS(version)  Lck  ESSID.
+    An AP is treated as locked only if *every* sighting reports it locked.
+    """
+    entries: dict[str, bool] = {}
     for line in text.splitlines():
-        m = re.match(r"^\s*([0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5})", line)
-        if m:
-            bssids.add(m.group(1).upper())
-    return bssids
+        m = re.match(r"^\s*([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})\s+(.*)$", line)
+        if not m:
+            continue
+        bssid = m.group(1).upper()
+        fields = m.group(2).split()
+        locked = len(fields) >= 4 and fields[3].strip().lower() in ("yes", "locked")
+        entries[bssid] = entries.get(bssid, True) and locked
+    return entries
+
+
+def parse_wash(text: str) -> set[str]:
+    """BSSIDs whose WPS is actually usable (advertised *and not locked*).
+
+    Locked APs refuse the WPS exchange, so attacking them (Pixie-Dust / PIN)
+    only wastes time — they are excluded here and won't get a WPS vector."""
+    return {b for b, locked in parse_wash_entries(text).items() if not locked}
 
 
 # --------------------------------------------------------------------------

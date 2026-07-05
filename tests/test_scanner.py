@@ -65,3 +65,24 @@ AA:BB:CC:DD:EE:99    1  -60  1.0  No   Another
     bssids = parse_wash(text)
     assert "AA:BB:CC:DD:EE:01" in bssids
     assert "AA:BB:CC:DD:EE:99" in bssids
+
+
+def test_parse_wash_excludes_locked():
+    # A locked AP advertises WPS but refuses it — must NOT be a WPS target.
+    text = """\
+BSSID               Ch  dBm  WPS  Lck  ESSID
+AA:BB:CC:DD:EE:01    6  -45  2.0  No   OpenWps
+AA:BB:CC:DD:EE:02    6  -50  2.0  Yes  LockedWps
+"""
+    bssids = parse_wash(text)
+    assert "AA:BB:CC:DD:EE:01" in bssids
+    assert "AA:BB:CC:DD:EE:02" not in bssids
+
+
+def test_parse_wash_unlocked_if_ever_seen_open():
+    # Seen locked once then unlocked → treat as usable.
+    text = """\
+AA:BB:CC:DD:EE:03    6  -45  2.0  Yes  Flaky
+AA:BB:CC:DD:EE:03    6  -45  2.0  No   Flaky
+"""
+    assert "AA:BB:CC:DD:EE:03" in parse_wash(text)
